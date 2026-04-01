@@ -1,0 +1,60 @@
+export const identityOptions = {
+  race: ["Black", "White", "Asian-Pac-Islander", "Amer-Indian-Eskimo", "Other"],
+  sex: ["Female", "Male"],
+  maritalStatus: ["Never-married", "Married-civ-spouse", "Divorced", "Separated"],
+  occupation: ["Exec-managerial", "Sales", "Prof-specialty", "Tech-support", "Adm-clerical"],
+};
+
+export const localProfiles = [
+  {
+    id: "profile-1",
+    label: "Black + Female + Married",
+    race: "Black",
+    sex: "Female",
+    maritalStatus: "Married-civ-spouse",
+    occupation: "Sales",
+    score: 0.34,
+    shap: [
+      { feature: "relationship=wife", impact: -0.19 },
+      { feature: "capital-gain", impact: 0.16 },
+      { feature: "hours-per-week", impact: 0.1 },
+      { feature: "marital-status", impact: -0.15 },
+      { feature: "occupation=sales", impact: -0.08 },
+      { feature: "education-num", impact: 0.06 },
+    ],
+  },
+  {
+    id: "profile-2",
+    label: "Black + Female + Never-married",
+    race: "Black",
+    sex: "Female",
+    maritalStatus: "Never-married",
+    occupation: "Adm-clerical",
+    score: 0.41,
+    shap: [
+      { feature: "capital-gain", impact: 0.18 },
+      { feature: "relationship=not-in-family", impact: -0.14 },
+      { feature: "hours-per-week", impact: 0.09 },
+      { feature: "occupation=adm-clerical", impact: -0.06 },
+      { feature: "education-num", impact: 0.07 },
+      { feature: "age", impact: -0.03 },
+    ],
+  },
+  {
+    id: "profile-3",
+    label: "White + Male + Married",
+    race: "White",
+    sex: "Male",
+    maritalStatus: "Married-civ-spouse",
+    occupation: "Exec-managerial",
+    score: 0.74,
+    shap: [
+      { feature: "capital-gain", impact: 0.23 },
+      { feature: "occupation=exec-managerial", impact: 0.16 },
+      { feature: "hours-per-week", impact: 0.11 },
+      { feature: "relationship=husband", impact: 0.08 },
+      { feature: "education-num", impact: 0.09 },
+      { feature: "capital-loss", impact: -0.02 },
+    ],
+  },
+];

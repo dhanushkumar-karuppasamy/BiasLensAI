@@ -7,11 +7,17 @@ from src.modeling import train_models
 st.set_page_config(page_title="BiasLens AI", layout="wide")
 st.title("BiasLens AI: Intersectional Bias Auditing via XAI")
 
+# Clear old cache artifacts once per browser session to avoid stale pre-refactor objects.
+if "cache_reset_done" not in st.session_state:
+	st.cache_data.clear()
+	st.cache_resource.clear()
+	st.session_state["cache_reset_done"] = True
+
 
 # --- 3. EXECUTE BACKGROUND TASKS ---
-df = load_data()
-X_train, X_test, X_blind_train, X_blind_test, model_A, model_B, df_display = train_models(df)
+train_df, test_df = load_data()
+results = train_models(train_df, test_df)
 
 
 # --- 4. BUILD THE UI DASHBOARD ---
-render_dashboard(X_test, X_blind_test, model_A, model_B, df_display)
+render_dashboard(results)

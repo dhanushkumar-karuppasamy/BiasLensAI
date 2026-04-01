@@ -1,0 +1,76 @@
+:root {
+  --bg-0: 246 248 252;
+  --bg-1: 238 243 250;
+  --surface: 255 255 255;
+  --surface-2: 250 252 255;
+
+  --text-primary: 15 23 42;
+  --text-secondary: 51 65 85;
+  --text-muted: 100 116 139;
+
+  --accent-cyan: 88 223 255;
+  --accent-violet: 143 116 255;
+  --accent-mint: 99 243 198;
+  --accent-rose: 255 126 175;
+
+  --ok: 84 214 132;
+  --warn: 252 192 95;
+  --danger: 250 107 126;
+
+  --radius-xs: 0.5rem;
+  --radius-sm: 0.75rem;
+  --radius-md: 1rem;
+  --radius-lg: 1.25rem;
+  --radius-xl: 1.75rem;
+
+  --shadow-soft: 0 12px 28px rgba(15, 23, 42, 0.08);
+  --shadow-glow: 0 0 0 1px rgba(148, 163, 184, 0.2), 0 20px 40px rgba(15, 23, 42, 0.07);
+}
+
+[data-theme="light"] {
+  color-scheme: light;
+}
+
+@layer utilities {
+  .bg-app-gradient {
+    background:
+      radial-gradient(circle at 10% 6%, rgba(var(--accent-cyan), 0.08), transparent 26%),
+      radial-gradient(circle at 90% 12%, rgba(var(--accent-violet), 0.1), transparent 32%),
+      linear-gradient(180deg, rgb(var(--bg-0)) 0%, rgb(var(--bg-1)) 100%);
+  }
+
+  .glass-panel {
+    background: rgb(var(--surface));
+    border: 1px solid rgba(148, 163, 184, 0.24);
+    box-shadow: var(--shadow-soft);
+  }
+
+  .app-card {
+    background: rgb(var(--surface));
+    border: 1px solid rgba(148, 163, 184, 0.2);
+    box-shadow: var(--shadow-soft);
+  }
+
+  .hairline {
+    border: 1px solid rgba(168, 186, 246, 0.16);
+  }
+
+  .text-gradient-brand {
+    background: linear-gradient(
+      95deg,
+      rgb(var(--accent-cyan)) 0%,
+      rgb(var(--accent-violet)) 52%,
+      rgb(var(--accent-mint)) 100%
+    );
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+
+  .text-gradient-subtle {
+    background: linear-gradient(90deg, rgb(15 23 42), rgb(30 58 138));
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+}

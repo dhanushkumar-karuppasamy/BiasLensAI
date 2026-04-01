@@ -54,6 +54,41 @@ Then open:
 
 - http://localhost:8501
 
+## Full-stack dev launcher (React + API + fallback test)
+
+Use the launcher script for a one-command startup.
+
+```bash
+bash scripts/dev_up.sh
+```
+
+This starts:
+
+- React frontend on `http://localhost:5173`
+- FastAPI backend on `http://localhost:8000`
+
+### Fallback-mode run (frontend only)
+
+To verify the Section 3 fallback path (API intentionally offline):
+
+```bash
+bash scripts/dev_up.sh --fallback
+```
+
+### Optional: include legacy Streamlit UI
+
+```bash
+bash scripts/dev_up.sh --with-streamlit
+```
+
+Streamlit will be available at `http://localhost:8502`.
+
+### Stop everything
+
+```bash
+bash scripts/dev_down.sh
+```
+
 ## Data Notes
 
 - The app expects Adult dataset files in `data/adult-training.csv` (primary) and `data/adult-test.csv`.

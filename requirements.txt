@@ -5,3 +5,5 @@ xgboost
 shap 
 streamlit 
 matplotlib
+fastapi
+uvicorn
