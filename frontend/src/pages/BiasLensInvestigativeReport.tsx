@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { AlertTriangle, FileOutput, Filter, Lock, SearchCheck, Upload } from "lucide-react";
+import DataSourceBadge from "../components/shared/DataSourceBadge";
 import {
   Bar,
   BarChart,
@@ -32,7 +33,21 @@ type FeatureImpactPoint = {
   impact: number;
 };
 
-const modelAFeatureImpact = [
+type CounterfactualProfile = {
+  approval: number;
+  status: "Reject" | "Borderline" | "Approve";
+  notes: string;
+  features: Array<{ feature: string; impact: number }>;
+};
+
+const COLORS = {
+  crimson: "#B91C1C",
+  deepBlue: "#1D4ED8",
+  mutedTeal: "#0F766E",
+  slate: "#1E293B",
+};
+
+const FALLBACK_MODEL_A_FEATURE_IMPACT: FeatureImpactPoint[] = [
   { feature: "Sex_Male", impact: 0.33 },
   { feature: "Education_Num", impact: 0.2 },
   { feature: "Capital_Gain", impact: 0.17 },
@@ -41,7 +56,7 @@ const modelAFeatureImpact = [
   { feature: "Marital_Status", impact: 0.08 },
 ];
 
-const modelBFeatureImpact = [
+const FALLBACK_MODEL_B_FEATURE_IMPACT: FeatureImpactPoint[] = [
   { feature: "Marital_Status", impact: 0.29 },
   { feature: "Occupation", impact: 0.24 },
   { feature: "Relationship", impact: 0.21 },
@@ -50,7 +65,7 @@ const modelBFeatureImpact = [
   { feature: "Native_Country", impact: 0.11 },
 ];
 
-const section3ComparisonRows: Section3Row[] = [
+const FALLBACK_SECTION3_COMPARISON_ROWS: Section3Row[] = [
   {
     metric: "Accuracy",
     modelA: "87.4%",
@@ -59,9 +74,9 @@ const section3ComparisonRows: Section3Row[] = [
   },
   {
     metric: "Demographic Parity",
-    modelA: "Failing",
-    modelB: "Failing",
-    modelC: "0.82 (Restored)",
+    modelA: "0.65 (Failing)",
+    modelB: "0.68 (Failing - Bias rerouted)",
+    modelC: "0.82 (Restored/Legal)",
   },
   {
     metric: "Fairness Posture",
@@ -71,7 +86,7 @@ const section3ComparisonRows: Section3Row[] = [
   },
 ];
 
-const modelCFeatureImpact: FeatureImpactPoint[] = [
+const FALLBACK_MODEL_C_FEATURE_IMPACT: FeatureImpactPoint[] = [
   { feature: "Education_Num", impact: 0.14 },
   { feature: "Capital_Gain", impact: 0.11 },
   { feature: "Hours_Per_Week", impact: 0.08 },
@@ -81,7 +96,7 @@ const modelCFeatureImpact: FeatureImpactPoint[] = [
   { feature: "Native_Country", impact: 0.03 },
 ];
 
-const localProfiles: Record<ProfileKey, LocalProfile> = {
+const FALLBACK_LOCAL_PROFILES: Record<ProfileKey, LocalProfile> = {
   black_female_divorced: {
     approval: 0.23,
     status: "Reject",
@@ -136,12 +151,12 @@ function ImpactBarChart({
   title,
   subtitle,
   data,
-  accent = "#991b1b",
+  accent,
 }: {
   title: string;
   subtitle: string;
   data: Array<{ feature: string; impact: number }>;
-  accent?: string;
+  accent: string;
 }) {
   return (
     <article className="border border-slate-300 bg-white p-4">
@@ -166,7 +181,10 @@ function ImpactBarChart({
             />
             <Bar dataKey="impact" radius={0}>
               {data.map((row) => (
-                <Cell key={row.feature} fill={row.feature.includes("Sex") || row.feature.includes("Marital") ? accent : "#0f172a"} />
+                <Cell
+                  key={row.feature}
+                  fill={row.feature.includes("Sex") || row.feature.includes("Marital") ? accent : COLORS.slate}
+                />
               ))}
             </Bar>
           </BarChart>
@@ -180,9 +198,118 @@ export default function BiasLensInvestigativeReport() {
   const [race, setRace] = useState("Black");
   const [sex, setSex] = useState("Female");
   const [marital, setMarital] = useState("Divorced");
-  const [section3Rows, setSection3Rows] = useState<Section3Row[]>(section3ComparisonRows);
-  const [section3ModelCImpact, setSection3ModelCImpact] = useState<FeatureImpactPoint[]>(modelCFeatureImpact);
-  const [isLoadingSection3, setIsLoadingSection3] = useState(true);
+  const [section1ModelAImpact, setSection1ModelAImpact] = useState<FeatureImpactPoint[]>(FALLBACK_MODEL_A_FEATURE_IMPACT);
+  const [section1ModelBImpact, setSection1ModelBImpact] = useState<FeatureImpactPoint[]>(FALLBACK_MODEL_B_FEATURE_IMPACT);
+  const [section2Profiles, setSection2Profiles] = useState<Record<ProfileKey, CounterfactualProfile>>(FALLBACK_LOCAL_PROFILES);
+  const [section3Rows, setSection3Rows] = useState<Section3Row[]>(FALLBACK_SECTION3_COMPARISON_ROWS);
+  const [section3ModelCImpact, setSection3ModelCImpact] = useState<FeatureImpactPoint[]>(FALLBACK_MODEL_C_FEATURE_IMPACT);
+  const [isLiveSection1, setIsLiveSection1] = useState(false);
+  const [isLiveSection2, setIsLiveSection2] = useState(false);
+  const [isLiveSection3, setIsLiveSection3] = useState(false);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const loadSection1Data = async () => {
+      try {
+        const [modelARes, modelBRes] = await Promise.all([
+          fetch("http://localhost:8000/api/model-a-shap"),
+          fetch("http://localhost:8000/api/model-b-shap"),
+        ]);
+
+        if (!modelARes.ok || !modelBRes.ok) {
+          throw new Error("section 1 endpoint request failed");
+        }
+
+        const [modelAPayload, modelBPayload] = (await Promise.all([
+          modelARes.json(),
+          modelBRes.json(),
+        ])) as [{ data?: FeatureImpactPoint[] }, { data?: FeatureImpactPoint[] }];
+
+        const modelAData = modelAPayload.data;
+        const modelBData = modelBPayload.data;
+
+        const validModelA =
+          Array.isArray(modelAData) &&
+          modelAData.every((point) => point && typeof point.feature === "string" && typeof point.impact === "number");
+        const validModelB =
+          Array.isArray(modelBData) &&
+          modelBData.every((point) => point && typeof point.feature === "string" && typeof point.impact === "number");
+
+        if (!validModelA || !validModelB) {
+          throw new Error("section 1 payload malformed");
+        }
+
+        if (isMounted) {
+          setSection1ModelAImpact(modelAData);
+          setSection1ModelBImpact(modelBData);
+          setIsLiveSection1(true);
+        }
+      } catch {
+        if (isMounted) {
+          setSection1ModelAImpact(FALLBACK_MODEL_A_FEATURE_IMPACT);
+          setSection1ModelBImpact(FALLBACK_MODEL_B_FEATURE_IMPACT);
+          setIsLiveSection1(false);
+        }
+      }
+    };
+
+    void loadSection1Data();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const loadSection2Data = async () => {
+      try {
+        const response = await fetch("http://localhost:8000/api/counterfactual");
+        if (!response.ok) {
+          throw new Error(`API request failed with status ${response.status}`);
+        }
+
+        const payload = (await response.json()) as { profiles?: Record<ProfileKey, CounterfactualProfile> };
+        const profiles = payload.profiles;
+
+        const keys: ProfileKey[] = ["black_female_divorced", "white_male_married", "black_male_never"];
+        const valid =
+          profiles &&
+          keys.every((key) => {
+            const candidate = profiles[key];
+            return (
+              candidate &&
+              typeof candidate.approval === "number" &&
+              typeof candidate.status === "string" &&
+              typeof candidate.notes === "string" &&
+              Array.isArray(candidate.features)
+            );
+          });
+
+        if (!valid) {
+          throw new Error("counterfactual payload malformed");
+        }
+
+        if (isMounted) {
+          setSection2Profiles(profiles);
+          setIsLiveSection2(true);
+        }
+      } catch {
+        if (isMounted) {
+          setSection2Profiles(FALLBACK_LOCAL_PROFILES);
+          setIsLiveSection2(false);
+        }
+      }
+    };
+
+    void loadSection2Data();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   useEffect(() => {
     let isMounted = true;
@@ -232,15 +359,13 @@ export default function BiasLensInvestigativeReport() {
         if (isMounted) {
           setSection3Rows(rows);
           setSection3ModelCImpact(modelC);
+          setIsLiveSection3(true);
         }
       } catch {
         if (isMounted) {
-          setSection3Rows(section3ComparisonRows);
-          setSection3ModelCImpact(modelCFeatureImpact);
-        }
-      } finally {
-        if (isMounted) {
-          setIsLoadingSection3(false);
+          setSection3Rows(FALLBACK_SECTION3_COMPARISON_ROWS);
+          setSection3ModelCImpact(FALLBACK_MODEL_C_FEATURE_IMPACT);
+          setIsLiveSection3(false);
         }
       }
     };
@@ -258,7 +383,7 @@ export default function BiasLensInvestigativeReport() {
     return "black_male_never";
   }, [race, sex, marital]);
 
-  const profile = localProfiles[profileKey];
+  const profile = section2Profiles[profileKey];
 
   return (
     <div className="min-h-screen bg-white text-slate-900">
@@ -280,18 +405,22 @@ export default function BiasLensInvestigativeReport() {
             "Removing sensitive attributes does not prevent discrimination; it merely obscures the mechanism and reroutes decisions through proxy variables."
           )}
 
+          <div className="mb-4">
+            <DataSourceBadge isLive={isLiveSection1} />
+          </div>
+
           <div className="grid gap-5 lg:grid-cols-2">
             <ImpactBarChart
               title="Model A (Overt Bias)"
               subtitle="Sex_Male directly lifts approval rates; protected variables remain visible and influential."
-              data={modelAFeatureImpact}
-              accent="#b91c1c"
+              data={section1ModelAImpact}
+              accent={COLORS.crimson}
             />
             <ImpactBarChart
               title="Model B (Colorblind Proxy Bias)"
               subtitle="After deleting Sex, bias pressure migrates to Marital-Status and Occupation pathways."
-              data={modelBFeatureImpact}
-              accent="#1d4ed8"
+              data={section1ModelBImpact}
+              accent={COLORS.deepBlue}
             />
           </div>
 
@@ -307,6 +436,10 @@ export default function BiasLensInvestigativeReport() {
             "The Compounding Penalty for Intersectional Identities",
             "Counterfactual analysis shows the same model can produce materially different outcomes for intersecting groups under a colorblind training regime."
           )}
+
+          <div className="mb-4">
+            <DataSourceBadge isLive={isLiveSection2} />
+          </div>
 
           <blockquote className="mb-6 border-y border-slate-900 py-4 font-serif text-2xl font-semibold leading-snug text-slate-950 md:text-3xl">
             “Under the ‘colorblind’ model, Black females experience a 60% lower approval rate compared to White males.”
@@ -372,7 +505,7 @@ export default function BiasLensInvestigativeReport() {
                 {profile.features.map((f) => (
                   <div key={f.feature} className="flex items-center justify-between border-b border-slate-200 py-2 text-sm">
                     <span className="font-medium text-slate-700">{f.feature}</span>
-                    <span className={f.impact < 0 ? "font-semibold text-red-700" : "font-semibold text-blue-800"}>
+                    <span className={f.impact < 0 ? "font-semibold text-[#B91C1C]" : "font-semibold text-[#1D4ED8]"}>
                       {f.impact > 0 ? "+" : ""}
                       {f.impact.toFixed(2)}
                     </span>
@@ -392,9 +525,9 @@ export default function BiasLensInvestigativeReport() {
             "Model C applies pre-processing sample reweighting to recover equity while retaining practical predictive utility."
           )}
 
-          <p className="mb-3 text-xs uppercase tracking-[0.14em] text-slate-500">
-            {isLoadingSection3 ? "Loading live backend metrics…" : "Live backend metrics loaded (fallback-safe)."}
-          </p>
+          <div className="mb-4">
+            <DataSourceBadge isLive={isLiveSection3} />
+          </div>
 
           <div className="grid gap-5 xl:grid-cols-[1fr_0.95fr]">
             <div className="overflow-hidden border border-slate-300 bg-white">
@@ -413,7 +546,7 @@ export default function BiasLensInvestigativeReport() {
                       <td className="px-4 py-3 font-medium">{row.metric}</td>
                       <td className={`px-4 py-3 ${row.modelA === "Failing" ? "text-red-700" : ""}`}>{row.modelA}</td>
                       <td className={`px-4 py-3 ${row.modelB === "Failing" ? "text-red-700" : ""}`}>{row.modelB}</td>
-                      <td className="px-4 py-3 font-semibold text-[#2F4F4F]">{row.modelC}</td>
+                      <td className="px-4 py-3 font-semibold text-[#0F766E]">{row.modelC}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -447,7 +580,11 @@ export default function BiasLensInvestigativeReport() {
                       {section3ModelCImpact.map((row) => (
                         <Cell
                           key={row.feature}
-                          fill={row.feature === "Marital_Status" || row.feature === "Occupation" ? "#3F6B68" : "#2F4F4F"}
+                          fill={
+                            row.feature === "Marital_Status" || row.feature === "Occupation"
+                              ? COLORS.mutedTeal
+                              : COLORS.slate
+                          }
                         />
                       ))}
                     </Bar>

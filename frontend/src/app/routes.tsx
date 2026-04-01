@@ -1,6 +1,7 @@
 import { Navigate, useRoutes } from "react-router-dom";
 import BiasLensLandingPage from "../pages/BiasLensLandingPage";
 import BiasLensInvestigativeReport from "../pages/BiasLensInvestigativeReport";
+import BiasLensWorkspace from "../pages/BiasLensWorkspace";
 
 function NotFoundPage() {
   return (
@@ -15,7 +16,8 @@ function NotFoundPage() {
 
 export function AppRoutes() {
   return useRoutes([
-    { path: "/", element: <BiasLensInvestigativeReport /> },
+    { path: "/", element: <BiasLensWorkspace /> },
+    { path: "/report", element: <BiasLensInvestigativeReport /> },
     { path: "/legacy", element: <BiasLensLandingPage /> },
     { path: "/home", element: <Navigate to="/" replace /> },
     { path: "*", element: <NotFoundPage /> },
