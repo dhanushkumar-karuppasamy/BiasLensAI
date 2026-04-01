@@ -1,0 +1,26 @@
+[
+  {
+    "name": "Marital Status_Married_Civ_Spouse",
+    "value": 1.1509650945663452
+  },
+  {
+    "name": "Age",
+    "value": 0.6963440179824829
+  },
+  {
+    "name": "Marital_Status",
+    "value": 0.617123
+  },
+  {
+    "name": "Sex_Male",
+    "value": 0.584921
+  },
+  {
+    "name": "Education_Num",
+    "value": 0.5321032404899597
+  },
+  {
+    "name": "Capital_Gain",
+    "value": 0.5021252036094666
+  }
+]

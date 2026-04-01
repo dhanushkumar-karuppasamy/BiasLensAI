@@ -5,7 +5,6 @@ import {
   Bar,
   BarChart,
   CartesianGrid,
-  Cell,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -29,8 +28,8 @@ type Section3Row = {
 };
 
 type FeatureImpactPoint = {
-  feature: string;
-  impact: number;
+  name: string;
+  value: number;
 };
 
 type CounterfactualProfile = {
@@ -38,6 +37,11 @@ type CounterfactualProfile = {
   status: "Reject" | "Borderline" | "Approve";
   notes: string;
   features: Array<{ feature: string; impact: number }>;
+};
+
+type BiasLensInvestigativeReportProps = {
+  isGlobalForcedFallback?: boolean;
+  onToggleGlobalFallback?: () => void;
 };
 
 const COLORS = {
@@ -48,21 +52,21 @@ const COLORS = {
 };
 
 const FALLBACK_MODEL_A_FEATURE_IMPACT: FeatureImpactPoint[] = [
-  { feature: "Sex_Male", impact: 0.33 },
-  { feature: "Education_Num", impact: 0.2 },
-  { feature: "Capital_Gain", impact: 0.17 },
-  { feature: "Hours_Per_Week", impact: 0.11 },
-  { feature: "Race_Black", impact: -0.19 },
-  { feature: "Marital_Status", impact: 0.08 },
+  { name: "Sex_Male", value: 0.36 },
+  { name: "Education_Num", value: 0.21 },
+  { name: "Race_Black", value: 0.19 },
+  { name: "Capital_Gain", value: 0.17 },
+  { name: "Hours_Per_Week", value: 0.11 },
+  { name: "Marital_Status", value: 0.09 },
 ];
 
 const FALLBACK_MODEL_B_FEATURE_IMPACT: FeatureImpactPoint[] = [
-  { feature: "Marital_Status", impact: 0.29 },
-  { feature: "Occupation", impact: 0.24 },
-  { feature: "Relationship", impact: 0.21 },
-  { feature: "Education_Num", impact: 0.18 },
-  { feature: "Capital_Gain", impact: 0.15 },
-  { feature: "Native_Country", impact: 0.11 },
+  { name: "Marital_Status", value: 0.32 },
+  { name: "Occupation", value: 0.24 },
+  { name: "Relationship", value: 0.21 },
+  { name: "Education_Num", value: 0.18 },
+  { name: "Capital_Gain", value: 0.15 },
+  { name: "Native_Country", value: 0.11 },
 ];
 
 const FALLBACK_SECTION3_COMPARISON_ROWS: Section3Row[] = [
@@ -87,13 +91,13 @@ const FALLBACK_SECTION3_COMPARISON_ROWS: Section3Row[] = [
 ];
 
 const FALLBACK_MODEL_C_FEATURE_IMPACT: FeatureImpactPoint[] = [
-  { feature: "Education_Num", impact: 0.14 },
-  { feature: "Capital_Gain", impact: 0.11 },
-  { feature: "Hours_Per_Week", impact: 0.08 },
-  { feature: "Relationship", impact: 0.07 },
-  { feature: "Marital_Status", impact: 0.06 },
-  { feature: "Occupation", impact: 0.05 },
-  { feature: "Native_Country", impact: 0.03 },
+  { name: "Education_Num", value: 0.14 },
+  { name: "Capital_Gain", value: 0.11 },
+  { name: "Hours_Per_Week", value: 0.08 },
+  { name: "Relationship", value: 0.07 },
+  { name: "Marital_Status", value: 0.05 },
+  { name: "Occupation", value: 0.05 },
+  { name: "Native_Country", value: 0.03 },
 ];
 
 const FALLBACK_LOCAL_PROFILES: Record<ProfileKey, LocalProfile> = {
@@ -155,7 +159,7 @@ function ImpactBarChart({
 }: {
   title: string;
   subtitle: string;
-  data: Array<{ feature: string; impact: number }>;
+  data: FeatureImpactPoint[];
   accent: string;
 }) {
   return (
@@ -169,7 +173,7 @@ function ImpactBarChart({
             <XAxis type="number" stroke="#475569" tickLine={false} axisLine={false} />
             <YAxis
               type="category"
-              dataKey="feature"
+              dataKey="name"
               width={132}
               stroke="#475569"
               tickLine={false}
@@ -179,14 +183,7 @@ function ImpactBarChart({
               formatter={(v: number) => v.toFixed(2)}
               contentStyle={{ border: "1px solid #cbd5e1", borderRadius: 0, background: "#fff" }}
             />
-            <Bar dataKey="impact" radius={0}>
-              {data.map((row) => (
-                <Cell
-                  key={row.feature}
-                  fill={row.feature.includes("Sex") || row.feature.includes("Marital") ? accent : COLORS.slate}
-                />
-              ))}
-            </Bar>
+            <Bar dataKey="value" radius={0} fill={accent} />
           </BarChart>
         </ResponsiveContainer>
       </div>
@@ -194,7 +191,10 @@ function ImpactBarChart({
   );
 }
 
-export default function BiasLensInvestigativeReport() {
+export default function BiasLensInvestigativeReport({
+  isGlobalForcedFallback = false,
+  onToggleGlobalFallback,
+}: BiasLensInvestigativeReportProps) {
   const [race, setRace] = useState("Black");
   const [sex, setSex] = useState("Female");
   const [marital, setMarital] = useState("Divorced");
@@ -206,15 +206,37 @@ export default function BiasLensInvestigativeReport() {
   const [isLiveSection1, setIsLiveSection1] = useState(false);
   const [isLiveSection2, setIsLiveSection2] = useState(false);
   const [isLiveSection3, setIsLiveSection3] = useState(false);
+  const [isApiOfflineSection1, setIsApiOfflineSection1] = useState(false);
+  const [isApiOfflineSection2, setIsApiOfflineSection2] = useState(false);
+  const [isApiOfflineSection3, setIsApiOfflineSection3] = useState(false);
+
+  const normalizeFeatureImpact = (value: unknown): FeatureImpactPoint[] | null => {
+    if (!Array.isArray(value)) return null;
+    const valid = value.every(
+      (point) => point && typeof point.name === "string" && typeof point.value === "number"
+    );
+    return valid ? (value as FeatureImpactPoint[]) : null;
+  };
 
   useEffect(() => {
     let isMounted = true;
 
+    if (isGlobalForcedFallback) {
+      setSection1ModelAImpact(FALLBACK_MODEL_A_FEATURE_IMPACT);
+      setSection1ModelBImpact(FALLBACK_MODEL_B_FEATURE_IMPACT);
+      setIsLiveSection1(false);
+      setIsApiOfflineSection1(false);
+      return () => {
+        isMounted = false;
+      };
+    }
+
     const loadSection1Data = async () => {
       try {
+        const t = Date.now();
         const [modelARes, modelBRes] = await Promise.all([
-          fetch("http://localhost:8000/api/model-a-shap"),
-          fetch("http://localhost:8000/api/model-b-shap"),
+          fetch(`http://localhost:8000/api/model-a-shap?t=${t}`),
+          fetch(`http://localhost:8000/api/model-b-shap?t=${t}`),
         ]);
 
         if (!modelARes.ok || !modelBRes.ok) {
@@ -224,19 +246,12 @@ export default function BiasLensInvestigativeReport() {
         const [modelAPayload, modelBPayload] = (await Promise.all([
           modelARes.json(),
           modelBRes.json(),
-        ])) as [{ data?: FeatureImpactPoint[] }, { data?: FeatureImpactPoint[] }];
+        ])) as [unknown, unknown];
 
-        const modelAData = modelAPayload.data;
-        const modelBData = modelBPayload.data;
+        const modelAData = normalizeFeatureImpact(modelAPayload);
+        const modelBData = normalizeFeatureImpact(modelBPayload);
 
-        const validModelA =
-          Array.isArray(modelAData) &&
-          modelAData.every((point) => point && typeof point.feature === "string" && typeof point.impact === "number");
-        const validModelB =
-          Array.isArray(modelBData) &&
-          modelBData.every((point) => point && typeof point.feature === "string" && typeof point.impact === "number");
-
-        if (!validModelA || !validModelB) {
+        if (!modelAData || !modelBData) {
           throw new Error("section 1 payload malformed");
         }
 
@@ -244,12 +259,14 @@ export default function BiasLensInvestigativeReport() {
           setSection1ModelAImpact(modelAData);
           setSection1ModelBImpact(modelBData);
           setIsLiveSection1(true);
+          setIsApiOfflineSection1(false);
         }
       } catch {
         if (isMounted) {
           setSection1ModelAImpact(FALLBACK_MODEL_A_FEATURE_IMPACT);
           setSection1ModelBImpact(FALLBACK_MODEL_B_FEATURE_IMPACT);
           setIsLiveSection1(false);
+          setIsApiOfflineSection1(true);
         }
       }
     };
@@ -259,14 +276,23 @@ export default function BiasLensInvestigativeReport() {
     return () => {
       isMounted = false;
     };
-  }, []);
+  }, [isGlobalForcedFallback]);
 
   useEffect(() => {
     let isMounted = true;
 
+    if (isGlobalForcedFallback) {
+      setSection2Profiles(FALLBACK_LOCAL_PROFILES);
+      setIsLiveSection2(false);
+      setIsApiOfflineSection2(false);
+      return () => {
+        isMounted = false;
+      };
+    }
+
     const loadSection2Data = async () => {
       try {
-        const response = await fetch("http://localhost:8000/api/counterfactual");
+        const response = await fetch(`http://localhost:8000/api/counterfactual?t=${Date.now()}`);
         if (!response.ok) {
           throw new Error(`API request failed with status ${response.status}`);
         }
@@ -295,11 +321,13 @@ export default function BiasLensInvestigativeReport() {
         if (isMounted) {
           setSection2Profiles(profiles);
           setIsLiveSection2(true);
+          setIsApiOfflineSection2(false);
         }
       } catch {
         if (isMounted) {
           setSection2Profiles(FALLBACK_LOCAL_PROFILES);
           setIsLiveSection2(false);
+          setIsApiOfflineSection2(true);
         }
       }
     };
@@ -309,14 +337,24 @@ export default function BiasLensInvestigativeReport() {
     return () => {
       isMounted = false;
     };
-  }, []);
+  }, [isGlobalForcedFallback]);
 
   useEffect(() => {
     let isMounted = true;
 
+    if (isGlobalForcedFallback) {
+      setSection3Rows(FALLBACK_SECTION3_COMPARISON_ROWS);
+      setSection3ModelCImpact(FALLBACK_MODEL_C_FEATURE_IMPACT);
+      setIsLiveSection3(false);
+      setIsApiOfflineSection3(false);
+      return () => {
+        isMounted = false;
+      };
+    }
+
     const loadSection3Data = async () => {
       try {
-        const response = await fetch("http://localhost:8000/api/model-metrics");
+        const response = await fetch(`http://localhost:8000/api/model-metrics?t=${Date.now()}`);
         if (!response.ok) {
           throw new Error(`API request failed with status ${response.status}`);
         }
@@ -328,11 +366,11 @@ export default function BiasLensInvestigativeReport() {
 
         const typedPayload = payload as {
           section3ComparisonRows?: Section3Row[];
-          featureImpact?: { modelC?: FeatureImpactPoint[] };
+          modelCFeatureImpact?: FeatureImpactPoint[];
         };
 
         const rows = typedPayload.section3ComparisonRows;
-        const modelC = typedPayload.featureImpact?.modelC;
+        const modelC = normalizeFeatureImpact(typedPayload.modelCFeatureImpact);
 
         const rowsValid =
           Array.isArray(rows) &&
@@ -345,14 +383,7 @@ export default function BiasLensInvestigativeReport() {
               typeof row.modelC === "string"
           );
 
-        const modelCValid =
-          Array.isArray(modelC) &&
-          modelC.every(
-            (point) =>
-              point && typeof point.feature === "string" && typeof point.impact === "number"
-          );
-
-        if (!rowsValid || !modelCValid) {
+        if (!rowsValid || !modelC) {
           throw new Error("Malformed metric rows or SHAP payload");
         }
 
@@ -360,12 +391,14 @@ export default function BiasLensInvestigativeReport() {
           setSection3Rows(rows);
           setSection3ModelCImpact(modelC);
           setIsLiveSection3(true);
+          setIsApiOfflineSection3(false);
         }
       } catch {
         if (isMounted) {
           setSection3Rows(FALLBACK_SECTION3_COMPARISON_ROWS);
           setSection3ModelCImpact(FALLBACK_MODEL_C_FEATURE_IMPACT);
           setIsLiveSection3(false);
+          setIsApiOfflineSection3(true);
         }
       }
     };
@@ -375,7 +408,7 @@ export default function BiasLensInvestigativeReport() {
     return () => {
       isMounted = false;
     };
-  }, []);
+  }, [isGlobalForcedFallback]);
 
   const profileKey = useMemo<ProfileKey>(() => {
     if (race === "Black" && sex === "Female" && marital === "Divorced") return "black_female_divorced";
@@ -384,18 +417,36 @@ export default function BiasLensInvestigativeReport() {
   }, [race, sex, marital]);
 
   const profile = section2Profiles[profileKey];
+  const isAnyApiOffline = isApiOfflineSection1 || isApiOfflineSection2 || isApiOfflineSection3;
 
   return (
     <div className="min-h-screen bg-white text-slate-900">
       <div className="mx-auto max-w-7xl px-6 py-8 md:px-10 md:py-10">
         <header className="mb-10 border-b border-slate-900 pb-6">
-          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">BiasLens Investigative Report</p>
-          <h1 className="mt-3 font-serif text-5xl font-black leading-tight text-slate-950 md:text-6xl">
-            Deleting Race and Gender Doesn&apos;t Make Your AI Fair.
-          </h1>
-          <p className="mt-4 max-w-3xl text-base text-slate-700">
-            Exposing the Colorblind Fallacy in tabular machine learning through SHAP-powered proxy detection.
-          </p>
+          <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">BiasLens Investigative Report</p>
+              <h1 className="mt-3 font-serif text-5xl font-black leading-tight text-slate-950 md:text-6xl">
+                Deleting Race and Gender Doesn&apos;t Make Your AI Fair.
+              </h1>
+              <p className="mt-4 max-w-3xl text-base text-slate-700">
+                Exposing the Colorblind Fallacy in tabular machine learning through SHAP-powered proxy detection.
+              </p>
+            </div>
+
+            <DataSourceBadge
+              mode="toggle"
+              isGlobalForcedFallback={isGlobalForcedFallback}
+              onToggleGlobalFallback={onToggleGlobalFallback}
+              className="self-start"
+            />
+          </div>
+
+          {isAnyApiOffline && !isGlobalForcedFallback && (
+            <div className="mt-4 border border-red-700 bg-red-50 px-3 py-2 text-xs font-semibold uppercase tracking-[0.12em] text-red-800">
+              API Offline: Live fetch failed. Showing golden synthetic fallback.
+            </div>
+          )}
         </header>
 
         <section id="hook" className="mb-14">
@@ -566,7 +617,7 @@ export default function BiasLensInvestigativeReport() {
                     <XAxis type="number" stroke="#475569" tickLine={false} axisLine={false} />
                     <YAxis
                       type="category"
-                      dataKey="feature"
+                      dataKey="name"
                       width={132}
                       stroke="#475569"
                       tickLine={false}
@@ -576,18 +627,7 @@ export default function BiasLensInvestigativeReport() {
                       formatter={(v: number) => v.toFixed(2)}
                       contentStyle={{ border: "1px solid #cbd5e1", borderRadius: 0, background: "#fff" }}
                     />
-                    <Bar dataKey="impact" radius={0}>
-                      {section3ModelCImpact.map((row) => (
-                        <Cell
-                          key={row.feature}
-                          fill={
-                            row.feature === "Marital_Status" || row.feature === "Occupation"
-                              ? COLORS.mutedTeal
-                              : COLORS.slate
-                          }
-                        />
-                      ))}
-                    </Bar>
+                    <Bar dataKey="value" radius={0} fill={COLORS.mutedTeal} />
                   </BarChart>
                 </ResponsiveContainer>
               </div>

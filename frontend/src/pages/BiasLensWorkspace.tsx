@@ -6,6 +6,7 @@ type TabKey = "report" | "studio";
 
 export default function BiasLensWorkspace() {
   const [activeTab, setActiveTab] = useState<TabKey>("report");
+  const [isGlobalForcedFallback, setIsGlobalForcedFallback] = useState(false);
 
   return (
     <div className="min-h-screen bg-white text-black">
@@ -33,7 +34,14 @@ export default function BiasLensWorkspace() {
         </div>
       </nav>
 
-      {activeTab === "report" ? <BiasLensInvestigativeReport /> : <InteractiveMitigationStudio />}
+      {activeTab === "report" ? (
+        <BiasLensInvestigativeReport
+          isGlobalForcedFallback={isGlobalForcedFallback}
+          onToggleGlobalFallback={() => setIsGlobalForcedFallback((current) => !current)}
+        />
+      ) : (
+        <InteractiveMitigationStudio isGlobalForcedFallback={isGlobalForcedFallback} />
+      )}
     </div>
   );
 }

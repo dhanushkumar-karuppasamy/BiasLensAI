@@ -4,7 +4,6 @@ import {
   Bar,
   BarChart,
   CartesianGrid,
-  Cell,
   Line,
   LineChart,
   PolarAngleAxis,
@@ -24,8 +23,8 @@ type TradeoffResponse = {
 };
 
 type ProxyImpactPoint = {
-  feature: string;
-  impact: number;
+  name: string;
+  value: number;
 };
 
 type ProxySquashResponse = {
@@ -54,6 +53,10 @@ type ImpossibilityResponse = {
   };
 };
 
+type InteractiveMitigationStudioProps = {
+  isGlobalForcedFallback?: boolean;
+};
+
 const FALLBACK_TRADEOFF: TradeoffResponse = {
   mitigation_weight: 0.5,
   accuracy: 0.86,
@@ -62,18 +65,18 @@ const FALLBACK_TRADEOFF: TradeoffResponse = {
 
 const FALLBACK_PROXY_SQUASH: ProxySquashResponse = {
   unmitigated: [
-    { feature: "Marital_Status", impact: 0.30 },
-    { feature: "Occupation", impact: 0.24 },
-    { feature: "Relationship", impact: 0.22 },
-    { feature: "Education_Num", impact: 0.19 },
-    { feature: "Capital_Gain", impact: 0.16 },
+    { name: "Marital_Status", value: 0.32 },
+    { name: "Occupation", value: 0.24 },
+    { name: "Relationship", value: 0.22 },
+    { name: "Education_Num", value: 0.19 },
+    { name: "Capital_Gain", value: 0.16 },
   ],
   mitigated: [
-    { feature: "Marital_Status", impact: 0.08 },
-    { feature: "Occupation", impact: 0.18 },
-    { feature: "Relationship", impact: 0.16 },
-    { feature: "Education_Num", impact: 0.17 },
-    { feature: "Capital_Gain", impact: 0.15 },
+    { name: "Marital_Status", value: 0.18 },
+    { name: "Occupation", value: 0.18 },
+    { name: "Relationship", value: 0.16 },
+    { name: "Education_Num", value: 0.17 },
+    { name: "Capital_Gain", value: 0.15 },
   ],
 };
 
@@ -82,7 +85,7 @@ const FALLBACK_APPLICANTS: MarginalApplicant[] = [
     id: "A-104",
     race: "Black",
     sex: "Female",
-    education: "Some-college",
+    education: "Bachelors",
     occupation: "Sales",
     marital_status: "Divorced",
     model_b_decision: "Rejected",
@@ -94,7 +97,7 @@ const FALLBACK_APPLICANTS: MarginalApplicant[] = [
     id: "A-127",
     race: "Black",
     sex: "Male",
-    education: "HS-grad",
+    education: "Some-college",
     occupation: "Transport-moving",
     marital_status: "Never-married",
     model_b_decision: "Rejected",
@@ -106,7 +109,7 @@ const FALLBACK_APPLICANTS: MarginalApplicant[] = [
     id: "A-133",
     race: "White",
     sex: "Female",
-    education: "Bachelors",
+    education: "Masters",
     occupation: "Adm-clerical",
     marital_status: "Separated",
     model_b_decision: "Rejected",
@@ -160,7 +163,17 @@ function pct(value: number) {
   return `${(value * 100).toFixed(1)}%`;
 }
 
-export default function InteractiveMitigationStudio() {
+function normalizeProxySeries(value: unknown): ProxyImpactPoint[] | null {
+  if (!Array.isArray(value)) return null;
+  const valid = value.every(
+    (point) => point && typeof point.name === "string" && typeof point.value === "number"
+  );
+  return valid ? (value as ProxyImpactPoint[]) : null;
+}
+
+export default function InteractiveMitigationStudio({
+  isGlobalForcedFallback = false,
+}: InteractiveMitigationStudioProps) {
   const [mitigationWeight, setMitigationWeight] = useState(0.5);
   const [tradeoff, setTradeoff] = useState<TradeoffResponse>(FALLBACK_TRADEOFF);
   const [tradeoffSeries, setTradeoffSeries] = useState<Array<{ step: number; accuracy: number }>>([
@@ -179,12 +192,36 @@ export default function InteractiveMitigationStudio() {
   const [isLiveProxySquash, setIsLiveProxySquash] = useState(false);
   const [isLiveApplicants, setIsLiveApplicants] = useState(false);
   const [isLiveImpossibility, setIsLiveImpossibility] = useState(false);
+  const [isApiOfflineTradeoff, setIsApiOfflineTradeoff] = useState(false);
+  const [isApiOfflineProxySquash, setIsApiOfflineProxySquash] = useState(false);
+  const [isApiOfflineApplicants, setIsApiOfflineApplicants] = useState(false);
+  const [isApiOfflineImpossibility, setIsApiOfflineImpossibility] = useState(false);
 
   useEffect(() => {
+    if (isGlobalForcedFallback) {
+      const forcedFallback = {
+        ...FALLBACK_TRADEOFF,
+        mitigation_weight: mitigationWeight,
+        accuracy: 0.89 - 0.06 * mitigationWeight,
+        demographic_parity: 0.55 + 0.31 * mitigationWeight,
+      };
+      setTradeoff(forcedFallback);
+      setIsLiveTradeoff(false);
+      setIsApiOfflineTradeoff(false);
+      setTradeoffSeries((prev) => [
+        ...prev.slice(-9),
+        {
+          step: prev.length,
+          accuracy: forcedFallback.accuracy,
+        },
+      ]);
+      return;
+    }
+
     const timeout = setTimeout(async () => {
       try {
         const response = await fetch(
-          `http://localhost:8000/api/tradeoff?mitigation_weight=${mitigationWeight.toFixed(2)}`
+          `http://localhost:8000/api/tradeoff?mitigation_weight=${mitigationWeight.toFixed(2)}&t=${Date.now()}`
         );
         if (!response.ok) throw new Error("tradeoff endpoint failed");
         const payload = (await response.json()) as TradeoffResponse;
@@ -198,6 +235,7 @@ export default function InteractiveMitigationStudio() {
 
         setTradeoff(payload);
         setIsLiveTradeoff(true);
+        setIsApiOfflineTradeoff(false);
         setTradeoffSeries((prev) => [
           ...prev.slice(-9),
           {
@@ -214,6 +252,7 @@ export default function InteractiveMitigationStudio() {
         };
         setTradeoff(fallback);
         setIsLiveTradeoff(false);
+        setIsApiOfflineTradeoff(true);
         setTradeoffSeries((prev) => [
           ...prev.slice(-9),
           {
@@ -225,34 +264,56 @@ export default function InteractiveMitigationStudio() {
     }, 120);
 
     return () => clearTimeout(timeout);
-  }, [mitigationWeight]);
+  }, [mitigationWeight, isGlobalForcedFallback]);
 
   useEffect(() => {
+    if (isGlobalForcedFallback) {
+      setProxySquashData(FALLBACK_PROXY_SQUASH);
+      setIsLiveProxySquash(false);
+      setIsApiOfflineProxySquash(false);
+      return;
+    }
+
     const loadProxySquash = async () => {
       try {
-        const response = await fetch("http://localhost:8000/api/proxy-squash");
+        const response = await fetch(`http://localhost:8000/api/proxy-squash?t=${Date.now()}`);
         if (!response.ok) throw new Error("proxy-squash endpoint failed");
-        const payload = (await response.json()) as ProxySquashResponse;
+        const payload = (await response.json()) as {
+          unmitigated?: ProxyImpactPoint[];
+          mitigated?: ProxyImpactPoint[];
+        };
 
-        if (!Array.isArray(payload.unmitigated) || !Array.isArray(payload.mitigated)) {
+        const unmitigated = normalizeProxySeries(payload.unmitigated);
+        const mitigated = normalizeProxySeries(payload.mitigated);
+
+        if (!unmitigated || !mitigated) {
           throw new Error("proxy-squash payload malformed");
         }
 
-        setProxySquashData(payload);
+        setProxySquashData({ unmitigated, mitigated });
         setIsLiveProxySquash(true);
+        setIsApiOfflineProxySquash(false);
       } catch {
         setProxySquashData(FALLBACK_PROXY_SQUASH);
         setIsLiveProxySquash(false);
+        setIsApiOfflineProxySquash(true);
       }
     };
 
     void loadProxySquash();
-  }, []);
+  }, [isGlobalForcedFallback]);
 
   useEffect(() => {
+    if (isGlobalForcedFallback) {
+      setApplicants(FALLBACK_APPLICANTS);
+      setIsLiveApplicants(false);
+      setIsApiOfflineApplicants(false);
+      return;
+    }
+
     const loadApplicants = async () => {
       try {
-        const response = await fetch("http://localhost:8000/api/marginal-applicants");
+        const response = await fetch(`http://localhost:8000/api/marginal-applicants?t=${Date.now()}`);
         if (!response.ok) throw new Error("marginal-applicants endpoint failed");
         const payload = (await response.json()) as { applicants: MarginalApplicant[] };
 
@@ -262,20 +323,47 @@ export default function InteractiveMitigationStudio() {
 
         setApplicants(payload.applicants);
         setIsLiveApplicants(true);
+        setIsApiOfflineApplicants(false);
       } catch {
         setApplicants(FALLBACK_APPLICANTS);
         setIsLiveApplicants(false);
+        setIsApiOfflineApplicants(true);
       }
     };
 
     void loadApplicants();
-  }, []);
+  }, [isGlobalForcedFallback]);
 
   useEffect(() => {
+    if (isGlobalForcedFallback) {
+      setImpossibilityData(
+        fairnessFocus === "parity"
+          ? {
+              fairness_focus: "parity",
+              metrics: {
+                demographic_parity: 0.87,
+                equal_opportunity: 0.68,
+                predictive_parity: 0.71,
+              },
+            }
+          : {
+              fairness_focus: "opportunity",
+              metrics: {
+                demographic_parity: 0.69,
+                equal_opportunity: 0.86,
+                predictive_parity: 0.72,
+              },
+            }
+      );
+      setIsLiveImpossibility(false);
+      setIsApiOfflineImpossibility(false);
+      return;
+    }
+
     const loadImpossibility = async () => {
       try {
         const response = await fetch(
-          `http://localhost:8000/api/impossibility-theorem?fairness_focus=${fairnessFocus}`
+          `http://localhost:8000/api/impossibility-theorem?fairness_focus=${fairnessFocus}&t=${Date.now()}`
         );
         if (!response.ok) throw new Error("impossibility-theorem endpoint failed");
         const payload = (await response.json()) as ImpossibilityResponse;
@@ -290,6 +378,7 @@ export default function InteractiveMitigationStudio() {
 
         setImpossibilityData(payload);
         setIsLiveImpossibility(true);
+        setIsApiOfflineImpossibility(false);
       } catch {
         setImpossibilityData(
           fairnessFocus === "parity"
@@ -310,12 +399,13 @@ export default function InteractiveMitigationStudio() {
                 },
               }
         );
-          setIsLiveImpossibility(false);
+        setIsLiveImpossibility(false);
+        setIsApiOfflineImpossibility(true);
       }
     };
 
     void loadImpossibility();
-  }, [fairnessFocus]);
+  }, [fairnessFocus, isGlobalForcedFallback]);
 
   const displayedProxyData = useMemo(
     () => (isMitigationEnabled ? proxySquashData.mitigated : proxySquashData.unmitigated),
@@ -332,6 +422,11 @@ export default function InteractiveMitigationStudio() {
   );
 
   const isStudioLive = isLiveTradeoff && isLiveProxySquash && isLiveApplicants && isLiveImpossibility;
+  const isAnyApiOffline =
+    isApiOfflineTradeoff ||
+    isApiOfflineProxySquash ||
+    isApiOfflineApplicants ||
+    isApiOfflineImpossibility;
 
   return (
     <div className="min-h-screen bg-white text-black">
@@ -347,6 +442,11 @@ export default function InteractiveMitigationStudio() {
           <div className="mt-4">
             <DataSourceBadge isLive={isStudioLive} />
           </div>
+          {isAnyApiOffline && !isGlobalForcedFallback && (
+            <div className="mt-3 border border-red-700 bg-red-50 px-3 py-2 text-xs font-semibold uppercase tracking-[0.12em] text-red-800">
+              API Offline: Live fetch failed. Showing golden synthetic fallback.
+            </div>
+          )}
         </header>
 
         <section className="mb-10 border border-black p-5">
@@ -412,25 +512,15 @@ export default function InteractiveMitigationStudio() {
                   <BarChart data={displayedProxyData} layout="vertical" margin={{ top: 5, right: 10, left: 10, bottom: 5 }}>
                     <CartesianGrid stroke="#000" strokeDasharray="2 2" />
                     <XAxis type="number" tickLine={false} axisLine={false} stroke="#000" />
-                    <YAxis type="category" dataKey="feature" tickLine={false} axisLine={false} stroke="#000" width={130} />
+                    <YAxis type="category" dataKey="name" tickLine={false} axisLine={false} stroke="#000" width={130} />
                     <Tooltip
                       formatter={(value: number) => value.toFixed(2)}
                       contentStyle={{ border: "1px solid #000", borderRadius: 0, background: "#fff" }}
                     />
-                    <Bar dataKey="impact">
-                      {displayedProxyData.map((row) => (
-                        <Cell
-                          key={row.feature}
-                          fill={
-                            row.feature === "Marital_Status"
-                              ? COLORS.crimson
-                              : isMitigationEnabled
-                                ? COLORS.mutedTeal
-                                : COLORS.slate
-                          }
-                        />
-                      ))}
-                    </Bar>
+                    <Bar
+                      dataKey="value"
+                      fill={isMitigationEnabled ? COLORS.mutedTeal : COLORS.deepBlue}
+                    />
                   </BarChart>
                 </ResponsiveContainer>
               </div>

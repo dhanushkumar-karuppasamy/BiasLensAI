@@ -1,0 +1,57 @@
+[
+  {
+    "id": "M-001",
+    "race": "White",
+    "sex": "Male",
+    "education": "Bachelors",
+    "occupation": "Craft-Repair",
+    "marital_status": "Married-Civ-Spouse",
+    "model_b_decision": "Rejected",
+    "model_c_decision": "Approved",
+    "shap_delta_explanation": "Approved after mitigation because intersectional reweighting reduced proxy-dominant penalties."
+  },
+  {
+    "id": "M-002",
+    "race": "White",
+    "sex": "Male",
+    "education": "Assoc-Voc",
+    "occupation": "Craft-Repair",
+    "marital_status": "Married-Civ-Spouse",
+    "model_b_decision": "Rejected",
+    "model_c_decision": "Approved",
+    "shap_delta_explanation": "Approved after mitigation because intersectional reweighting reduced proxy-dominant penalties."
+  },
+  {
+    "id": "M-003",
+    "race": "White",
+    "sex": "Male",
+    "education": "Some-College",
+    "occupation": "Craft-Repair",
+    "marital_status": "Married-Civ-Spouse",
+    "model_b_decision": "Rejected",
+    "model_c_decision": "Approved",
+    "shap_delta_explanation": "Approved after mitigation because intersectional reweighting reduced proxy-dominant penalties."
+  },
+  {
+    "id": "M-004",
+    "race": "White",
+    "sex": "Male",
+    "education": "Some-College",
+    "occupation": "Tech-Support",
+    "marital_status": "Married-Civ-Spouse",
+    "model_b_decision": "Rejected",
+    "model_c_decision": "Approved",
+    "shap_delta_explanation": "Approved after mitigation because intersectional reweighting reduced proxy-dominant penalties."
+  },
+  {
+    "id": "M-005",
+    "race": "White",
+    "sex": "Male",
+    "education": "Doctorate",
+    "occupation": "Prof-Specialty",
+    "marital_status": "Never-Married",
+    "model_b_decision": "Rejected",
+    "model_c_decision": "Approved",
+    "shap_delta_explanation": "Approved after mitigation because intersectional reweighting reduced proxy-dominant penalties."
+  }
+]
