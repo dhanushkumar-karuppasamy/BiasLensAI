@@ -1,113 +1,144 @@
 # BiasLens AI
 
-BiasLens AI is a Streamlit-based prototype for auditing algorithmic bias in the Adult Income dataset using explainable AI (SHAP) and two model perspectives:
+BiasLens AI is an explainable fairness-auditing project built on the Adult Income dataset.
 
-- **Model A (Overt Bias)**: trained with all features, including protected attributes.
-- **Model B (Proxy Bias)**: trained after removing `sex` and `race` to reveal proxy behavior.
+It currently supports:
 
-The app visualizes global feature influence and helps demonstrate the colorblind fallacy: removing protected attributes does not necessarily remove bias.
+- **React frontend** (`frontend/`) for the investigative report UX
+- **FastAPI bridge backend** (`api.py`) serving model metrics/SHAP payloads to React
+- **Legacy Streamlit app** (`app.py`) kept intact for side-by-side validation and fallback demos
 
-## Features
+The modeling layer compares:
 
-- Data loading and preprocessing pipeline for Adult dataset files in `data/`
-- XGBoost training for both overt and proxy-bias models
-- SHAP summary plots for side-by-side global audit
-- Streamlit UI with tabs for global and local/intersectional auditing workflow
-- Modular code structure under `src/`
+- **Model A (Overt Bias)**
+- **Model B (Proxy Bias)**
+- **Model C (Mitigated Bias)** via sample reweighting
 
-## Project Structure
+---
+
+## Current architecture
+
+- `src/data_processing.py` → dataset load/clean
+- `src/modeling.py` → training, fairness metrics, SHAP feature impact extraction
+- `api.py` → JSON endpoint for frontend (`/api/model-metrics`)
+- `frontend/src/pages/BiasLensInvestigativeReport.tsx` → Section 3 fetches live data with strict fallback to local constants
+- `app.py` + `src/dashboard.py` → Streamlit dashboard (unchanged)
+
+---
+
+## Project structure
 
 ```text
-BiasLens_AI/
+BiasLensAI/
+├─ api.py
 ├─ app.py
 ├─ requirements.txt
 ├─ README.md
+├─ scripts/
+│  ├─ dev_up.sh
+│  └─ dev_down.sh
 ├─ data/
 │  ├─ adult-training.csv
 │  └─ adult-test.csv
-└─ src/
-   ├─ __init__.py
-   ├─ data_processing.py
-   ├─ modeling.py
-   └─ dashboard.py
+├─ src/
+│  ├─ __init__.py
+│  ├─ data_processing.py
+│  ├─ modeling.py
+│  └─ dashboard.py
+└─ frontend/
+   ├─ package.json
+   └─ src/
 ```
+
+---
 
 ## Setup
 
-### 1) Create and activate a Python environment
-
-Use your preferred environment manager (conda or venv).
-
-### 2) Install dependencies
+### Python deps
 
 ```bash
 pip install -r requirements.txt
 ```
 
-## Run the App
+### Frontend deps
 
 ```bash
-streamlit run app.py
+cd frontend
+npm install
 ```
 
-Then open:
+---
 
-- http://localhost:8501
+## One-command dev run (recommended)
 
-## Full-stack dev launcher (React + API + fallback test)
-
-Use the launcher script for a one-command startup.
+From repo root:
 
 ```bash
 bash scripts/dev_up.sh
 ```
 
-This starts:
+Starts:
 
-- React frontend on `http://localhost:5173`
-- FastAPI backend on `http://localhost:8000`
+- Frontend: `http://localhost:5173`
+- FastAPI: `http://localhost:8000`
 
-### Fallback-mode run (frontend only)
-
-To verify the Section 3 fallback path (API intentionally offline):
+### Fallback-mode run (API intentionally off)
 
 ```bash
 bash scripts/dev_up.sh --fallback
 ```
 
-### Optional: include legacy Streamlit UI
+Use this to validate React fallback behavior in Section 3.
+
+### Optional: include legacy Streamlit
 
 ```bash
 bash scripts/dev_up.sh --with-streamlit
 ```
 
-Streamlit will be available at `http://localhost:8502`.
+Streamlit will be available on `http://localhost:8502`.
 
-### Stop everything
+### Stop all dev processes
 
 ```bash
 bash scripts/dev_down.sh
 ```
 
-## Data Notes
+> Note: in restricted environments where execute-bit changes are blocked, always run scripts with `bash scripts/...`.
 
-- The app expects Adult dataset files in `data/adult-training.csv` (primary) and `data/adult-test.csv`.
-- Files are parsed as headerless CSV with predefined column names.
-- Missing values marked with `?` are dropped for this prototype.
+---
 
-## Implementation Notes
+## API endpoint used by frontend
 
-- Entry point: `app.py`
-- Data loading/cleaning: `src/data_processing.py`
-- Model training: `src/modeling.py`
-- UI rendering + SHAP plots: `src/dashboard.py`
+- `GET /api/model-metrics`
 
-## Known Behavior
+Returns:
 
-- You may see a non-blocking XGBoost warning about `use_label_encoder` being unused in newer versions. The app still runs correctly.
+- `section3ComparisonRows`
+- `featureImpact.modelA`
+- `featureImpact.modelB`
+- `featureImpact.modelC`
 
-## Next Steps
+---
 
-- Implement the Tab 2 local explanation workflow with subgroup filters and SHAP waterfall plots.
-- Add model metrics (accuracy, precision/recall, subgroup comparison).
-- Add fairness metrics (demographic parity, equal opportunity) for deeper audits.
+## Quick verification checklist
+
+1. Open frontend at `http://localhost:5173`
+2. Confirm backend endpoint at `http://localhost:8000/api/model-metrics`
+3. In browser DevTools → Network, verify `model-metrics` returns `200`
+4. Compare Section 3 values against API response
+
+For fallback check:
+
+1. Run `bash scripts/dev_up.sh --fallback`
+2. Refresh frontend
+3. Confirm Section 3 still renders with local fallback data
+
+---
+
+## Known non-blocking warnings
+
+- XGBoost may warn that `use_label_encoder` is unused.
+- Running Streamlit-decorated code in bare Python/FastAPI may show Streamlit context warnings.
+
+These warnings are expected and do not block API/frontend functionality.
